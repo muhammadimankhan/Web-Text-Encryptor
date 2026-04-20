@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web-Based Text Encryption Tool</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <style>
+        :root {
+            --primary: #2563eb;
+            --background: #f1f5f9;
+            --surface: #ffffff;
+            --text: #1e293b;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--background);
+            color: var(--text);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+        }
+        .container {
+            background-color: var(--surface);
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+            width: 100%;
+            max-width: 600px;
+        }
+        h2 { text-align: center; color: var(--primary); margin-top: 0; }
+        .form-group { margin-bottom: 1.5rem; }
+        label { display: block; font-weight: 600; margin-bottom: 0.5rem; }
+        textarea, select, input {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            box-sizing: border-box;
+            font-family: inherit;
+        }
+        textarea { resize: vertical; min-height: 100px; }
+        .button-group { display: flex; gap: 1rem; margin-bottom: 1.5rem; }
+        button {
+            flex: 1;
+            padding: 0.75rem;
+            border: none;
+            border-radius: 6px;
+            background-color: var(--primary);
+            color: white;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        button:hover { background-color: #1d4ed8; }
+        button.secondary { background-color: #475569; }
+        button.secondary:hover { background-color: #334155; }
+        .error { color: #dc2626; font-size: 0.875rem; display: none; margin-top: 0.5rem; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>Secure Text Encryptor</h2>
+    
+    <div class="form-group">
+        <label for="inputText">Input Text</label>
+        <textarea id="inputText" placeholder="Enter your plain text or ciphertext here..."></textarea>
+        <div id="inputError" class="error">Please enter some text.</div>
+    </div>
+
+    <div class="form-group">
+        <label for="algorithm">Encryption Algorithm</label>
+        <select id="algorithm" onchange="toggleKeyRequirement()">
+            <option value="" disabled selected>Select an algorithm...</option>
+            <option value="AES">AES (Advanced Encryption Standard)</option>
+            <option value="Caesar">Caesar Cipher</option>
+            <option value="Base64">Base64 Encoding</option>
+            <option value="SHA256">SHA-256 (Hashing - One Way)</option>
+        </select>
+        <div id="algoError" class="error">Please select an algorithm.</div>
+    </div>
+
+    <div class="form-group" id="keyGroup">
+        <label for="secretKey">Secret Key / Shift Value</label>
+        <input type="text" id="secretKey" placeholder="Enter secret password (AES) or number (Caesar)">
+        <div id="keyError" class="error">A key or shift value is required for this algorithm.</div>
+    </div>
+
+    <div class="button-group">
+        <button onclick="processText('encrypt')">Encrypt</button>
+        <button onclick="processText('decrypt')" class="secondary" id="decryptBtn">Decrypt</button>
+    </div>
+
+    <div class="form-group">
+        <label for="outputText">Output Result</label>
+        <textarea id="outputText" readonly></textarea>
+        <button onclick="copyOutput()" class="secondary" style="margin-top: 0.5rem; width: auto; padding: 0.5rem 1rem;">Copy to Clipboard</button>
+    </div>
+</div>
+
+<script>
+    // Adjust UI based on selected algorithm
+    function toggleKeyRequirement() {
+        const algo = document.getElementById('algorithm').value;
+        const keyGroup = document.getElementById('keyGroup');
+        const decryptBtn = document.getElementById('decryptBtn');
+        
+        // Base64 and SHA-256 don't need user keys
+        if (algo === 'Base64' || algo === 'SHA256') {
+            keyGroup.style.display = 'none';
+        } else {
+            keyGroup.style.display = 'block';
+        }
+
+        // SHA-256 cannot be decrypted
+        if (algo === 'SHA256') {
+            decryptBtn.disabled = true;
+            decryptBtn.style.opacity = '0.5';
+            decryptBtn.style.cursor = 'not-allowed';
+            decryptBtn.title = 'Hashing is a one-way function';
+        } else {
+            decryptBtn.disabled = false;
+            decryptBtn.style.opacity = '1';
+            decryptBtn.style.cursor = 'pointer';
+            decryptBtn.title = '';
+        }
+    }
+
+    // Main processing logic
+    function processText(action) {
+        // Reset errors
+        document.querySelectorAll('.error').forEach(e => e.style.display = 'none');
+        
+        const text = document.getElementById('inputText').value.trim();
+        const algo = document.getElementById('algorithm').value;
+        const key = document.getElementById('secretKey').value.trim();
+        
+        // Validation
+        let isValid = true;
+        if (!text) { document.getElementById('inputError').style.display = 'block'; isValid = false; }
+        if (!algo) { document.getElementById('algoError').style.display = 'block'; isValid = false; }
+        if ((algo === 'AES' || algo === 'Caesar') && !key) { 
+            document.getElementById('keyError').style.display = 'block'; isValid = false; 
+        }
+
+        if (!isValid) return;
+
+        let result = '';
+
+        try {
+            if (algo === 'AES') {
+                if (action === 'encrypt') {
+                    result = CryptoJS.AES.encrypt(text, key).toString();
+                } else {
+                    const bytes = CryptoJS.AES.decrypt(text, key);
+                    result = bytes.toString(CryptoJS.enc.Utf8);
+                    if (!result) throw new Error("Invalid key or corrupted ciphertext");
+                }
+            } 
+            else if (algo === 'Caesar') {
+                const shift = parseInt(key) || 0;
+                result = caesarCipher(text, action === 'encrypt' ? shift : -shift);
+            }
+            else if (algo === 'Base64') {
+                if (action === 'encrypt') {
+                    result = btoa(unescape(encodeURIComponent(text)));
+                } else {
+                    result = decodeURIComponent(escape(atob(text)));
+                }
+            }
+            else if (algo === 'SHA256' && action === 'encrypt') {
+                result = CryptoJS.SHA256(text).toString();
+            }
+
+            document.getElementById('outputText').value = result;
+        } catch (error) {
+            alert("Error during processing: " + error.message);
+            document.getElementById('outputText').value = '';
+        }
+    }
+
+    // Custom Caesar Cipher Implementation
+    function caesarCipher(str, shift) {
+        // Normalize shift to be within 0-25
+        shift = ((shift % 26) + 26) % 26;
+        let output = '';
+        
+        for (let i = 0; i < str.length; i++) {
+            let charCode = str.charCodeAt(i);
+            
+            // Uppercase letters
+            if (charCode >= 65 && charCode <= 90) {
+                output += String.fromCharCode(((charCode - 65 + shift) % 26) + 65);
+            }
+            // Lowercase letters
+            else if (charCode >= 97 && charCode <= 122) {
+                output += String.fromCharCode(((charCode - 97 + shift) % 26) + 97);
+            }
+            // Non-alphabetic characters remain unchanged
+            else {
+                output += str[i];
+            }
+        }
+        return output;
+    }
+
+    // Copy to clipboard feature
+    function copyOutput() {
+        const outputField = document.getElementById('outputText');
+        if (!outputField.value) return;
+        
+        outputField.select();
+        document.execCommand('copy');
+        alert("Copied to clipboard!");
+    }
+</script>
+
+</body>
+</html>
